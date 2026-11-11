@@ -319,17 +319,35 @@ def classify(f):
 
 # ---------------------------------------------------------------- env client
 
-def http_json(url, data=None):
+def http_json(url, data=None, tries=3):
     req = urllib.request.Request(url, data=data)
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode("utf-8"))
+    last = None
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            # 409 means the answers were already accepted: a retry would
+            # only repeat that, so treat it as done.
+            if e.code == 409:
+                return json.loads(e.read().decode("utf-8"))
+            last = e
+        except Exception as e:  # transient env hiccup: retry the same request
+            last = e
+    raise last
 
 
-def http_bytes(url):
-    with urllib.request.urlopen(url, timeout=60) as r:
-        return r.read()
+def http_bytes(url, tries=3):
+    last = None
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                return r.read()
+        except Exception as e:
+            last = e
+    raise last
 
 
 def main():
